@@ -1280,17 +1280,39 @@ echo_paths_routes = [
 
 
 def test_paths_with_root_path(test_client_factory: typing.Callable[..., TestClient]):
-    app = Starlette(routes=echo_paths_routes)
+    scope_before: Scope
+    scope_after: Scope
+
+    class CustomMiddleware:
+        def __init__(self, app: ASGIApp) -> None:
+            self.app = app
+
+        async def __call__(self, scope: Scope, receive: Receive, send: Send):
+            nonlocal scope_before, scope_after
+            scope_before = scope
+            await self.app(scope, receive, send)
+            scope_after = scope
+
+    app = Starlette(
+        routes=echo_paths_routes,
+        middleware=[Middleware(CustomMiddleware)],
+    )
     client = test_client_factory(
-        app, base_url="https://www.example.org/", root_path="/root"
+        app,
+        base_url="https://www.example.org/",
+        root_path="/root",
     )
     response = client.get("/root/path")
+
     assert response.status_code == 200
     assert response.json() == {
         "name": "path",
         "path": "/root/path",
         "root_path": "/root",
     }
+    assert scope_before["path"] == scope_after["path"] == "/root/path"
+    assert scope_before["root_path"] == scope_after["root_path"] == "/root"
+
     response = client.get("/root/asgipath/")
     assert response.status_code == 200
     assert response.json() == {
@@ -1302,6 +1324,8 @@ def test_paths_with_root_path(test_client_factory: typing.Callable[..., TestClie
         # are mounted on
         "root_path": "/root/asgipath",
     }
+    assert scope_before["path"] == scope_after["path"] == "/root/asgipath/"
+    assert scope_before["root_path"] == scope_after["root_path"] == "/root"
 
     response = client.get("/root/sub/path")
     assert response.status_code == 200
@@ -1310,3 +1334,5 @@ def test_paths_with_root_path(test_client_factory: typing.Callable[..., TestClie
         "path": "/root/sub/path",
         "root_path": "/root/sub",
     }
+    assert scope_before["path"] == scope_after["path"] == "/root/sub/path"
+    assert scope_before["root_path"] == scope_after["root_path"] == "/root"

@@ -206,8 +206,9 @@ class BaseRoute:
                 await websocket_close(scope, receive, send)
             return
 
-        scope.update(child_scope)
-        await self.handle(scope, receive, send)
+        new_scope = scope.copy()
+        new_scope.update(child_scope)
+        await self.handle(new_scope, receive, send)
 
 
 class Route(BaseRoute):
@@ -778,8 +779,9 @@ class Router:
             # and hand over to the matching route if found.
             match, child_scope = route.matches(scope)
             if match == Match.FULL:
-                scope.update(child_scope)
-                await route.handle(scope, receive, send)
+                new_scope = scope.copy()
+                new_scope.update(child_scope)
+                await route.handle(new_scope, receive, send)
                 return
             elif match == Match.PARTIAL and partial is None:
                 partial = route
@@ -789,8 +791,9 @@ class Router:
             #  Handle partial matches. These are cases where an endpoint is
             # able to handle the request, but is not a preferred option.
             # We use this in particular to deal with "405 Method Not Allowed".
-            scope.update(partial_scope)
-            await partial.handle(scope, receive, send)
+            new_scope = scope.copy()
+            new_scope.update(partial_scope)
+            await partial.handle(new_scope, receive, send)
             return
 
         route_path = get_route_path(scope)
